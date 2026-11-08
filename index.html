@@ -848,66 +848,178 @@
                             </div>
                         ` : (idx === 0 ? `<span class="text-slate-400 font-normal">Base</span>` : `-`)}
                     </td>
-                    <td class="py-2 px-1 border-r border-slate-300 font-semibold text-slate-700">
-                        ${r.dias !== null && idx > 0 ? `${r.dias}` : `-`}
+                    <td class="py-2 px-1 border-r border-slate-300 bg-amber-50/30 font-semibold text-slate-700">
+                        ${idx > 0 ? `
+                            <input type="number" step="1" value="${r.dias !== null ? r.dias : ''}" placeholder="Dias" onchange="updateCellField(${idx}, 'dias', this.value)" class="sheet-input text-center font-bold text-slate-900 text-xs py-1 no-spin" title="Edite manualmente se quiser calcular a média parcial do mês">
+                        ` : `-`}
                     </td>
                     <td class="py-2 px-1 border-r border-slate-300 font-bold text-slate-800">
                         ${r.media !== null && idx > 0 ? `${r.media.toFixed(3)}` : `-`}
                     </td>
                     <td class="py-2 px-1 border-r border-slate-300 text-left">
-                        <input type="text" value="${r.obs || ''}" placeholder="+ Nota..." onchange="updateCellField(${idx}, 'obs', this.value)" class="sheet-input text-left text-slate-700 text-[11px] py-1 px-1">
+                        <input type="text" value="${r.obs || ''}" placeholder="+ Adicionar nota..." onchange="updateCellField(${idx}, 'obs', this.value)" class="sheet-input text-left text-slate-800 text-[11px] px-1 py-1">
                     </td>
                     <td class="py-2 px-1">
                         <div class="flex items-center justify-center gap-1">
-                            <button onclick="openModal(${idx})" class="p-1 hover:bg-slate-200 rounded text-slate-600 transition" title="Editar completo"><i data-lucide="edit" class="w-3.5 h-3.5"></i></button>
-                            <button onclick="deleteRow(${idx})" class="p-1 hover:bg-red-200 rounded text-red-600 transition" title="Excluir"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                            <button onclick="openModal(${idx})" class="p-1 hover:bg-slate-200 rounded text-slate-600 transition" title="Editar completo">
+                                <i data-lucide="edit" class="w-3.5 h-3.5"></i>
+                            </button>
+                            <button onclick="deleteRow(${idx})" class="p-1 hover:bg-red-100 rounded text-red-600 transition" title="Excluir">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            </button>
                         </div>
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
 
-            // Rodapé com somatórios
-            tfoot.innerHTML = `
-                <tr class="bg-slate-200 border-t-2 border-slate-400 font-extrabold text-slate-900 text-xs">
-                    <td class="py-2.5 px-2 text-left pl-3" colspan="2">TOTAL ANUAL (${currentYear})</td>
-                    <td class="py-2.5 px-1 text-center text-slate-900">R$ ${metrics.totalVal.toFixed(2)}</td>
-                    <td class="py-2.5 px-1 text-center text-amber-900">R$ ${metrics.totalTaxaIlum.toFixed(2)}</td>
-                    <td class="py-2.5 px-1 text-center" colspan="2">Consumo: ${metrics.totalCons} kWh</td>
-                    <td class="py-2.5 px-1 text-center" colspan="2">Média: ${metrics.totalDays > 0 ? (metrics.totalCons / (metrics.totalDays/30)).toFixed(1) : 0} kWh/mês</td>
-                    <td class="py-2.5 px-1 text-center" colspan="3">${metrics.isentosCount} meses isentos de IP</td>
-                </tr>
-            `;
-
-            // Atualiza KPIs do topo
-            document.getElementById("kpiTotalValor").textContent = `R$ ${metrics.totalVal.toFixed(2)}`;
-            document.getElementById("kpiMediaValor").textContent = `Média: R$ ${metrics.countVal > 0 ? (metrics.totalVal / metrics.countVal).toFixed(2) : '0,00'}/mês`;
-            document.getElementById("kpiTotalTaxaIlum").textContent = `R$ ${metrics.totalTaxaIlum.toFixed(2)}`;
-            document.getElementById("kpiQtdTaxaIlum").textContent = `${metrics.countTaxaIlum} meses cobrados`;
-            document.getElementById("kpiTotalConsumo").textContent = `${metrics.totalCons} kWh`;
-            document.getElementById("kpiMediaConsumo").textContent = `Média: ${metrics.totalValidRows > 0 ? Math.round(metrics.totalCons / metrics.totalValidRows) : 0} kWh/mês`;
-            
-            const geralMediaDiaria = metrics.totalDays > 0 ? (metrics.totalCons / metrics.totalDays).toFixed(3) : "0,000";
-            document.getElementById("kpiMediaDiaria").textContent = geralMediaDiaria;
-            document.getElementById("kpiTotalDias").textContent = `kWh/dia (${metrics.totalDays} dias)`;
-
-            const lastValid = records.slice().reverse().find(r => r.leitura !== null);
-            if (lastValid) {
-                document.getElementById("kpiUltimaLeitura").textContent = lastValid.leitura.toLocaleString('pt-BR');
-                document.getElementById("kpiDataUltimaLeitura").textContent = lastValid.dataLeitura ? `Em ${lastValid.dataLeitura.split('-').reverse().join('/')}` : lastValid.mes;
+            // Rodapé com somatório anual
+            if (tfoot) {
+                tfoot.innerHTML = `
+                    <tr class="border-t-2 border-slate-300 bg-slate-200/80">
+                        <td class="py-2.5 px-2 text-left pl-2.5">TOTAL ANUAL</td>
+                        <td>-</td>
+                        <td class="text-center font-extrabold text-slate-900">R$ ${metrics.totalVal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                        <td class="text-center font-extrabold text-amber-900">R$ ${metrics.totalTaxaIlum.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                        <td>-</td>
+                        <td class="text-center font-extrabold text-emerald-900">${records[records.length-1]?.leitura || 0} kWh</td>
+                        <td class="text-center font-extrabold text-slate-900">${metrics.totalCons} kWh</td>
+                        <td class="text-center font-extrabold text-slate-900">${metrics.totalDays} dias</td>
+                        <td class="text-center font-extrabold text-slate-900">${metrics.totalDays > 0 ? (metrics.totalCons / metrics.totalDays).toFixed(3) : '0,000'}</td>
+                        <td class="text-left font-normal text-[11px] text-slate-600 pl-2">Isentos IP (≤100 kWh): ${metrics.isentosCount} meses</td>
+                        <td></td>
+                    </tr>
+                `;
             }
 
-            document.getElementById("resumoIsencaoAnual").textContent = `Isentos de IP: ${metrics.isentosCount} de ${metrics.totalValidRows} meses`;
+            // Atualiza KPIs do Topo
+            document.getElementById("kpiTotalValor").textContent = `R$ ${metrics.totalVal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            document.getElementById("kpiMediaValor").textContent = `Média: R$ ${metrics.countVal > 0 ? (metrics.totalVal / metrics.countVal).toFixed(2) : '0,00'}/mês`;
+            
+            document.getElementById("kpiTotalTaxaIlum").textContent = `R$ ${metrics.totalTaxaIlum.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            document.getElementById("kpiQtdTaxaIlum").textContent = `${metrics.countTaxaIlum} meses cobrados`;
+
+            document.getElementById("kpiTotalConsumo").textContent = `${metrics.totalCons} kWh`;
+            document.getElementById("kpiMediaConsumo").textContent = `Média: ${metrics.totalValidRows > 0 ? Math.round(metrics.totalCons / metrics.totalValidRows) : 0} kWh/mês`;
+
+            const mediaGeralDiaria = metrics.totalDays > 0 ? metrics.totalCons / metrics.totalDays : 0;
+            document.getElementById("kpiMediaDiaria").textContent = mediaGeralDiaria.toFixed(3);
+            document.getElementById("kpiTotalDias").textContent = `kWh/dia (${metrics.totalDays} dias)`;
+
+            document.getElementById("resumoIsencaoAnual").textContent = `Isentos: ${metrics.isentosCount} de ${metrics.totalValidRows} meses`;
+
+            const lastWithReading = [...records].reverse().find(r => r.leitura !== null);
+            if (lastWithReading) {
+                document.getElementById("kpiUltimaLeitura").textContent = lastWithReading.leitura.toLocaleString('pt-BR');
+                document.getElementById("kpiDataUltimaLeitura").textContent = lastWithReading.dataLeitura ? `Em ${lastWithReading.dataLeitura.split('-').reverse().join('/')}` : lastWithReading.mes;
+            }
+
+            const tarifaMedia = metrics.totalCons > 0 ? metrics.totalVal / metrics.totalCons : 0;
+            document.getElementById("kpiTarifaMedia").textContent = `R$ ${tarifaMedia.toFixed(2)}`;
 
             lucide.createIcons();
             updateCharts();
         }
 
+        function calculateMetrics() {
+            let prevR = null;
+            let prevD = null;
+            let totalVal = 0;
+            let totalTaxaIlum = 0;
+            let countTaxaIlum = 0;
+            let totalCons = 0;
+            let totalDays = 0;
+            let countVal = 0;
+            let isentosCount = 0;
+            let totalValidRows = 0;
+
+            const ignoreAbrilReplaced = document.getElementById("ignoreReplacedToggle")?.checked ?? true;
+
+            records.forEach((r, idx) => {
+                if (r.leitura !== null && !isNaN(r.leitura)) {
+                    if (prevR !== null && r.dataLeitura && prevD) {
+                        const d1 = new Date(prevD);
+                        const d2 = new Date(r.dataLeitura);
+                        const diffTime = d2 - d1;
+                        const calcDias = Math.round(diffTime / (1000 * 60 * 60 * 24));
+                        if (!r._diasEditadoManual && (r.dias === null || r.dias === undefined || r.dias === 0)) {
+                            r.dias = calcDias;
+                        }
+                    }
+
+                    if (idx > 0 && prevR !== null) {
+                        let isAprilReplacedChild = (ignoreAbrilReplaced && currentYear === "2026" && idx === 6);
+                        let isAprilFirstChild = (ignoreAbrilReplaced && currentYear === "2026" && idx === 5);
+
+                        if (isAprilReplacedChild) {
+                            const aprilFirstRow = records[5];
+                            const marchRow = records[4];
+                            if (marchRow && marchRow.leitura !== null) {
+                                r.consumo = r.leitura - marchRow.leitura;
+                            } else {
+                                r.consumo = r.leitura - prevR;
+                            }
+                        } else if (isAprilFirstChild) {
+                            r.consumo = r.leitura - prevR;
+                        } else {
+                            if (ignoreAbrilReplaced && currentYear === "2026" && idx === 7) {
+                                const abrilRevisadaRow = records[6];
+                                if (abrilRevisadaRow && abrilRevisadaRow.leitura !== null) {
+                                    r.consumo = r.leitura - abrilRevisadaRow.leitura;
+                                } else {
+                                    r.consumo = r.leitura - prevR;
+                                }
+                            } else {
+                                r.consumo = r.leitura - prevR;
+                            }
+                        }
+                    } else {
+                        r.consumo = 0;
+                    }
+
+                    if (r.consumo > 0 && r.dias > 0) {
+                        r.media = r.consumo / r.dias;
+                    } else {
+                        r.media = 0;
+                    }
+
+                    if (idx > 0) {
+                        totalValidRows++;
+                        if (r.valor !== null && !isNaN(r.valor)) {
+                            totalVal += r.valor;
+                            countVal++;
+                        }
+                        if (r.taxaIlum !== null && !isNaN(r.taxaIlum)) {
+                            totalTaxaIlum += r.taxaIlum;
+                            if (r.taxaIlum > 0) countTaxaIlum++;
+                        }
+                        if (r.consumo !== null && !isNaN(r.consumo)) {
+                            totalCons += r.consumo;
+                        }
+                        if (r.dias !== null && !isNaN(r.dias)) {
+                            totalDays += Number(r.dias);
+                        }
+                        if (r.consumo !== null && r.consumo <= 100) {
+                            isentosCount++;
+                        }
+                    }
+                    prevR = r.leitura;
+                    if (r.dataLeitura) prevD = r.dataLeitura;
+                } else {
+                    r.consumo = null;
+                    r.media = null;
+                }
+            });
+
+            return { totalVal, totalTaxaIlum, countTaxaIlum, totalCons, totalDays, countVal, isentosCount, totalValidRows };
+        }
+
         function updateCellField(idx, field, val) {
-            if (field === 'valor' || field === 'taxaIlum') {
+            if (field === 'valor' || field === 'taxaIlum' || field === 'leitura') {
                 records[idx][field] = val === "" ? null : Number(val);
-            } else if (field === 'leitura') {
+            } else if (field === 'dias') {
                 records[idx][field] = val === "" ? null : Number(val);
+                records[idx]['_diasEditadoManual'] = (val !== "");
             } else if (field === 'obs') {
                 records[idx]['obs'] = val;
             } else {
