@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Energia - CEMIG</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js para gráficos interativos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Fonte Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f3;
+            overflow-x: hidden;
+        }
+        /* Cores fiéis ao estilo da planilha Excel do usuário */
+        .row-verde {
+            background-color: #d1fae5 !important;
+        }
+        .row-verde:hover {
+            background-color: #a7f3d0 !important;
+        }
+        .row-amarelo {
+            background-color: #fef08a !important;
+        }
+        .row-amarelo:hover {
+            background-color: #fde047 !important;
+        }
+        .row-branco {
+            background-color: #ffffff !important;
+        }
+        .row-branco:hover {
+            background-color: #f8fafc !important;
+        }
+        .cell-vermelho {
+            background-color: #ef4444 !important;
+            color: #ffffff !important;
+            font-weight: 800 !important;
+            border-radius: 5px;
+        }
+        .cemig-header {
+            background: linear-gradient(135deg, #0b3d1c 0%, #156d34 100%);
+        }
+        /* Inputs compactos estilo planilha sem estourar largura */
+        .sheet-input {
+            background-color: transparent;
+            border: 1px solid transparent;
+            border-radius: 5px;
+            transition: all 0.12s ease;
+            width: 100%;
+        }
+        .sheet-input:hover {
+            background-color: rgba(255, 255, 255, 0.85);
+            border-color: #94a3b8;
+        }
+        .sheet-input:focus {
+            background-color: #ffffff !important;
+            border-color: #059669 !important;
+            box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.25);
+            outline: none;
+        }
+        /* Remove setinhas padrão do input number */
+        input[type=number].no-spin::-webkit-inner-spin-button,
+        input[type=number].no-spin::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type=number].no-spin {
+            -moz-appearance: textfield;
+        }
+        /* Compacta o ícone nativo de calendário para caber sem rolagem horizontal */
+        input[type="date"].compact-date::-webkit-calendar-picker-indicator {
+            margin-left: -4px;
+            padding: 0;
+            cursor: pointer;
+            transform: scale(0.85);
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- Cabeçalho Principal Estilo CEMIG com Seletor Anual -->
+    <header class="cemig-header text-white shadow-md sticky top-0 z-30">
+        <div class="max-w-[1440px] mx-auto px-3 sm:px-5 py-2.5 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5">
+                <div class="bg-white/15 p-2 rounded-xl border border-white/20">
+                    <i data-lucide="zap" class="w-5 h-5 text-yellow-300 fill-yellow-300"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 id="headerTitleYear" class="text-lg sm:text-xl font-extrabold tracking-tight">CEMIG - 2026</h1>
+                        <!-- Selo de Status da Nuvem em Tempo Real -->
+                        <button onclick="openCloudModal('sheets')" id="cloudStatusBadge" class="inline-flex items-center gap-1.5 bg-emerald-500/30 hover:bg-emerald-500/45 border border-emerald-300/40 text-emerald-50 text-[11px] font-semibold px-2.5 py-0.5 rounded-full transition cursor-pointer" title="Clique para sincronizar com o Google Sheets">
+                            <span id="cloudStatusDot" class="w-2 h-2 rounded-full bg-emerald-300 animate-pulse"></span>
+                            <span id="cloudStatusText">Google Drive: Conectado</span>
+                        </button>
+                    </div>
+                    <p class="text-[11px] sm:text-xs text-emerald-100/90">Edite <strong>Leitura</strong>, <strong>Valor</strong>, <strong>TAXA ILUM.</strong> ou <strong>Observações</strong> direto na tabela</p>
+                </div>
+            </div>
+
+            <!-- Barra de Navegação de Anos + Ações -->
+            <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <!-- Seletor de Ano Interativo -->
+                <div class="flex items-center bg-black/25 p-1 rounded-xl border border-white/20">
+                    <button onclick="stepYear(-1)" class="p-1 hover:bg-white/15 rounded-lg text-emerald-100 hover:text-white transition" title="Ano Anterior">
+                        <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                    </button>
+                    <div class="flex items-center px-1.5 gap-1">
+                        <i data-lucide="calendar" class="w-3.5 h-3.5 text-yellow-300"></i>
+                        <select id="yearSelector" onchange="switchYear(this.value)" class="bg-transparent text-white font-extrabold text-xs sm:text-sm focus:outline-none cursor-pointer">
+                            <!-- Preenchido via JS -->
+                        </select>
+                    </div>
+                    <button onclick="stepYear(1)" class="p-1 hover:bg-white/15 rounded-lg text-emerald-100 hover:text-white transition" title="Próximo Ano">
+                        <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="createNewYearPrompt()" class="ml-1 flex items-center gap-1 bg-emerald-500/40 hover:bg-emerald-500/60 text-white text-[11px] font-bold px-2 py-1 rounded-lg border border-emerald-300/30 transition" title="Criar ou abrir outro ano puxando a última leitura">
+                        <i data-lucide="calendar-plus" class="w-3.5 h-3.5"></i>
+                        <span>+ Novo Ano</span>
+                    </button>
+                </div>
+
+                <!-- Botão Google Sheets / Nuvem -->
+                <button onclick="openCloudModal('sheets')" class="flex items-center gap-1.5 bg-emerald-600/80 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-xl border border-emerald-300/40 shadow-sm transition text-xs sm:text-sm" title="Sincronizar com Planilha do Google">
+                    <i data-lucide="cloud-cog" class="w-4 h-4 text-yellow-300"></i>
+                    <span>Google Sheets</span>
+                </button>
+
+                <button onclick="openModal()" class="flex items-center gap-1 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-bold px-3 py-1.5 rounded-xl shadow-sm transition text-xs sm:text-sm">
+                    <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                    <span>Nova Linha</span>
+                </button>
+                <button onclick="exportCSV()" class="flex items-center gap-1 bg-white/10 hover:bg-white/20 text-white font-medium px-2.5 py-1.5 rounded-xl border border-white/20 transition text-xs sm:text-sm" title="Baixar planilha do ano atual em Excel">
+                    <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                    <span class="hidden sm:inline">CSV</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Conteúdo Principal em Largura Total (Zero Barra Horizontal) -->
+    <main class="max-w-[1440px] w-full mx-auto px-2 sm:px-4 py-4 space-y-4 flex-1">
+
+        <!-- Linha Superior Compacta: KPIs + Faixa Horizontal de Isenção de Iluminação Pública (<= 100 kWh) -->
+        <div class="grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
+            
+            <!-- 6 KPIs Compactos incluindo Total de TAXA ILUM. (7 colunas no desktop) -->
+            <div class="xl:col-span-7 grid grid-cols-2 sm:grid-cols-6 gap-2">
+                <div class="bg-white rounded-xl p-2.5 shadow-xs border border-slate-200/90 flex flex-col justify-between">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Pago</span>
+                    <p id="kpiTotalValor" class="text-sm sm:text-base font-extrabold text-slate-800 leading-tight mt-0.5">R$ 0,00</p>
+                    <p id="kpiMediaValor" class="text-[10px] text-emerald-700 font-semibold truncate">Média: R$ 0,00</p>
+                </div>
+
+                <div class="bg-white rounded-xl p-2.5 shadow-xs border border-slate-200/90 flex flex-col justify-between">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-amber-700">Total TAXA ILUM.</span>
+                    <p id="kpiTotalTaxaIlum" class="text-sm sm:text-base font-extrabold text-amber-800 leading-tight mt-0.5">R$ 0,00</p>
+                    <p id="kpiQtdTaxaIlum" class="text-[10px] text-amber-600 font-semibold truncate">0 meses cobrados</p>
+                </div>
+
+                <div class="bg-white rounded-xl p-2.5 shadow-xs border border-slate-200/90 flex flex-col justify-between">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Consumo Anual</span>
+                    <p id="kpiTotalConsumo" class="text-sm sm:text-base font-extrabold text-slate-800 leading-tight mt-0.5">0 kWh</p>
+                    <p id="kpiMediaConsumo" class="text-[10px] text-blue-600 font-semibold truncate">Média: 0 kWh/mês</p>
+                </div>
+
+                <div class="bg-white rounded-xl p-2.5 shadow-xs border border-slate-200/90 flex flex-col justify-between">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Média Diária</span>
+                    <p id="kpiMediaDiaria" class="text-sm sm:text-base font-extrabold text-slate-800 leading-tight mt-0.5">0,000</p>
+                    <p id="kpiTotalDias" class="text-[10px] text-amber-600 font-semibold truncate">kWh/dia (0 dias)</p>
+                </div>
+
+                <div class="bg-white rounded-xl p-2.5 shadow-xs border border-slate-200/90 flex flex-col justify-between">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Última Leitura</span>
+                    <p id="kpiUltimaLeitura" class="text-sm sm:text-base font-extrabold text-emerald-800 leading-tight mt-0.5">19.179</p>
+                    <p id="kpiDataUltimaLeitura" class="text-[10px] text-slate-500 font-semibold truncate">Em 06/11/2026</p>
+                </div>
+
+                <div class="bg-white rounded-xl p-2.5 shadow-xs border border-slate-200/90 flex flex-col justify-between">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tarifa Efetiva</span>
+                    <p id="kpiTarifaMedia" class="text-sm sm:text-base font-extrabold text-purple-700 leading-tight mt-0.5">R$ 1,32</p>
+                    <p class="text-[10px] text-slate-500 font-semibold truncate">Custo médio/kWh</p>
+                </div>
+            </div>
+
+            <!-- Guia Horizontal Fixo: Isenção da Taxa de Iluminação Pública (<= 100 kWh) (5 colunas no desktop) -->
+            <div class="xl:col-span-5 bg-gradient-to-r from-emerald-950 via-emerald-900 to-slate-900 text-white rounded-xl px-3.5 py-2.5 shadow-sm border border-emerald-700/70 flex flex-col justify-between">
+                <div class="flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-1.5">
+                        <i data-lucide="lightbulb-off" class="w-4 h-4 text-yellow-300 shrink-0"></i>
+                        <span class="text-xs font-extrabold tracking-tight text-white">Meta Isenção Iluminação Pública: <strong class="text-yellow-300">Máx. 100 kWh</strong></span>
+                    </div>
+                    <div id="resumoIsencaoAnual" class="text-[10px] text-emerald-200 font-bold shrink-0">
+                        Isentos: --
+                    </div>
+                </div>
+
+                <!-- 6 Pares Exatos em Linha Única Compacta -->
+                <div class="grid grid-cols-3 sm:grid-cols-6 gap-1.5 mt-2 text-center">
+                    <div class="bg-white/10 rounded-lg py-1 px-1 border border-white/10">
+                        <span class="block text-[10px] text-emerald-200 leading-none">33 dias</span>
+                        <span class="font-extrabold text-yellow-300 text-xs">3,030</span>
+                    </div>
+                    <div class="bg-white/10 rounded-lg py-1 px-1 border border-white/10">
+                        <span class="block text-[10px] text-emerald-200 leading-none">32 dias</span>
+                        <span class="font-extrabold text-yellow-300 text-xs">3,124</span>
+                    </div>
+                    <div class="bg-white/10 rounded-lg py-1 px-1 border border-white/10">
+                        <span class="block text-[10px] text-emerald-200 leading-none">31 dias</span>
+                        <span class="font-extrabold text-yellow-300 text-xs">3,225</span>
+                    </div>
+                    <div class="bg-white/10 rounded-lg py-1 px-1 border border-white/10">
+                        <span class="block text-[10px] text-emerald-200 leading-none">30 dias</span>
+                        <span class="font-extrabold text-yellow-300 text-xs">3,333</span>
+                    </div>
+                    <div class="bg-white/10 rounded-lg py-1 px-1 border border-white/10">
+                        <span class="block text-[10px] text-emerald-200 leading-none">29 dias</span>
+                        <span class="font-extrabold text-yellow-300 text-xs">3,447</span>
+                    </div>
+                    <div class="bg-white/10 rounded-lg py-1 px-1 border border-white/10">
+                        <span class="block text-[10px] text-emerald-200 leading-none">28 dias</span>
+                        <span class="font-extrabold text-yellow-300 text-xs">3,535</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABELA PRINCIPAL EM LARGURA TOTAL (100% Full Width - Zero Rolagem Horizontal) -->
+        <section class="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
+            <!-- Barra de Título verde escura idêntica à planilha -->
+            <div class="cemig-header px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="table-2" class="w-4 h-4 text-yellow-300"></i>
+                    <h2 id="tableBannerTitle" class="text-base font-extrabold tracking-wide text-white uppercase">CEMIG - 2026</h2>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-3 text-[11px] text-emerald-100">
+                    <label id="abrilToggleContainer" class="flex items-center gap-1.5 cursor-pointer select-none font-semibold bg-black/25 px-2.5 py-1 rounded-lg border border-white/15 text-white">
+                        <input type="checkbox" id="ignoreReplacedToggle" checked onchange="renderAll()" class="rounded text-emerald-500 focus:ring-0">
+                        <span>Ignorar 1ª leitura de Abril (contestada) no saldo e ligar Maio à revisada (18.501)</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Tabela com Layout Fixo/Ajustado para caber 100% na tela sem scroll horizontal -->
+            <div class="w-full overflow-x-auto">
+                <table class="w-full min-w-[850px] table-fixed border-collapse text-center text-xs">
+                    <thead>
+                        <tr class="bg-slate-100 border-b-2 border-slate-300 text-slate-800 font-extrabold text-[11px] uppercase tracking-tight">
+                            <th class="w-[9%] py-2 px-1.5 border-r border-slate-300 text-left pl-2.5">Mês</th>
+                            <th class="w-[10.5%] py-2 px-1 border-r border-slate-300">Data leitura</th>
+                            <th class="w-[8%] py-2 px-1 border-r border-slate-300">Valor</th>
+                            <th class="w-[8.5%] py-2 px-1 border-r border-slate-300 bg-amber-100/70 text-amber-950" title="Informe manualmente o valor da Contribuição de Iluminação Pública">
+                                TAXA ILUM.
+                            </th>
+                            <th class="w-[10.5%] py-2 px-1 border-r border-slate-300">Vencimento</th>
+                            <th class="w-[9%] py-2 px-1 border-r border-slate-300 bg-emerald-100/80 text-emerald-950" title="Clique no número da leitura para alterar diretamente">
+                                <div class="flex items-center justify-center gap-1">
+                                    <span>Leitura</span>
+                                    <i data-lucide="edit-3" class="w-3 h-3 text-emerald-700"></i>
+                                </div>
+                            </th>
+                            <th class="w-[9%] py-2 px-1 border-r border-slate-300">Consumo</th>
+                            <th class="w-[5%] py-2 px-1 border-r border-slate-300">Dias</th>
+                            <th class="w-[8%] py-2 px-1 border-r border-slate-300">Média</th>
+                            <th class="w-[17.5%] py-2 px-1.5 border-r border-slate-300 text-left">Observações</th>
+                            <th class="w-[5%] py-2 px-1">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody" class="divide-y divide-slate-300 font-semibold text-slate-900">
+                        <!-- Linhas geradas via JavaScript -->
+                    </tbody>
+                    <tfoot id="tableFooter" class="bg-slate-100 border-t-2 border-slate-300 font-extrabold text-xs text-slate-900">
+                        <!-- Rodapé com somatório anual gerado via JavaScript -->
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+
+        <!-- Seção Inferior (Abaixo da Tabela): Simulador de Relógio + Gráficos Lado a Lado -->
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+            
+            <!-- Simulador de Medidor em Tempo Real (4 colunas) -->
+            <div class="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+                        <div class="bg-emerald-100 text-emerald-800 p-1.5 rounded-lg">
+                            <i data-lucide="activity" class="w-4 h-4"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-slate-800 text-sm">Simulador de Relógio (Hoje)</h3>
+                            <p class="text-[11px] text-slate-500">Teste a leitura atual e veja o saldo até 100 kWh</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 space-y-2.5">
+                        <div class="grid grid-cols-2 gap-2.5">
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Leitura Base Anterior</label>
+                                <input type="number" id="simBaseLeitura" value="19179" oninput="runSimulator()" class="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-600">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Data Base Anterior</label>
+                                <input type="date" id="simBaseData" value="2026-11-06" oninput="runSimulator()" class="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs font-medium text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-600">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2.5">
+                            <div>
+                                <label class="block text-[11px] font-bold text-emerald-800 mb-0.5">Leitura no Medidor Agora</label>
+                                <input type="number" id="simAtualLeitura" value="19180" oninput="runSimulator()" placeholder="Ex: 19250" class="w-full rounded-lg border-2 border-emerald-600 px-2.5 py-1.5 text-sm font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-bold text-emerald-800 mb-0.5">Ciclo Previsto</label>
+                                <select id="simCicloDias" onchange="runSimulator()" class="w-full rounded-lg border-2 border-emerald-600 px-2 py-1.5 text-xs font-bold text-slate-900 focus:outline-none bg-white">
+                                    <option value="28">28d (Máx 3,535)</option>
+                                    <option value="29">29d (Máx 3,447)</option>
+                                    <option value="30" selected>30d (Máx 3,333)</option>
+                                    <option value="31">31d (Máx 3,225)</option>
+                                    <option value="32">32d (Máx 3,124)</option>
+                                    <option value="33">33d (Máx 3,030)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Data da Consulta no Relógio</label>
+                            <input type="date" id="simAtualData" value="2026-11-07" oninput="runSimulator()" class="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resultado da Simulação -->
+                <div class="bg-emerald-950 text-white rounded-xl p-3 mt-3 space-y-1.5">
+                    <div class="flex justify-between items-center text-xs text-emerald-200">
+                        <span>Consumo parcial:</span>
+                        <span id="simResultConsumo" class="font-bold text-white">1 kWh em 1 dia(s)</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs text-emerald-200">
+                        <span>Média diária atual:</span>
+                        <span id="simResultMedia" class="font-bold text-yellow-300">1,000 kWh/dia</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs text-emerald-200">
+                        <span>Saldo p/ Isenção (100 kWh):</span>
+                        <span id="simResultSaldo100" class="font-extrabold text-[11px] bg-emerald-800 text-emerald-100 px-2 py-0.5 rounded">Restam 99 kWh</span>
+                    </div>
+                    <div id="simStatusMetaBox" class="text-[11px] bg-emerald-900/90 border border-emerald-700 rounded-lg px-2 py-1 text-emerald-100">
+                        <span id="simStatusMetaTexto">Dentro da meta (Limite: 3,333/dia)</span>
+                    </div>
+                    <div class="border-t border-emerald-800 pt-1.5 flex justify-between items-baseline">
+                        <span class="text-xs text-emerald-200">Estimativa Parcial:</span>
+                        <span id="simResultValorParcial" class="text-base font-extrabold text-emerald-300">R$ 1,32</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gráfico 1: Valor (R$) vs Consumo (kWh) (4 colunas) -->
+            <div class="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col justify-between">
+                <div class="mb-2">
+                    <h3 class="font-bold text-slate-800 text-sm">Valor da Conta (R$) vs Consumo (kWh)</h3>
+                    <p id="chartSubtitleYear" class="text-[11px] text-slate-500">Comparativo mensal do ano selecionado</p>
+                </div>
+                <div class="h-64 w-full">
+                    <canvas id="chartValorConsumo"></canvas>
+                </div>
+            </div>
+
+            <!-- Gráfico 2: Média Diária (kWh/dia) (4 colunas) -->
+            <div class="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col justify-between">
+                <div class="mb-2">
+                    <h3 class="font-bold text-slate-800 text-sm">Evolução da Média Diária (kWh / dia)</h3>
+                    <p class="text-[11px] text-slate-500">Referência de isenção entre 3,030 e 3,535 kWh/dia</p>
+                </div>
+                <div class="h-64 w-full">
+                    <canvas id="chartMediaDiaria"></canvas>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal de Configuração do Google Sheets -->
+    <div id="cloudModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="cemig-header px-6 py-4 flex items-center justify-between text-white">
+                <h3 class="font-bold text-base flex items-center gap-2">
+                    <i data-lucide="cloud-cog" class="w-5 h-5 text-yellow-300"></i>
+                    Sincronização com Google Sheets
+                </h3>
+                <button onclick="closeCloudModal()" class="text-white/80 hover:text-white p-1 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="p-6 space-y-4 text-xs">
+                <p class="text-slate-600">Este sistema está conectado à sua planilha do Google Drive. Ao alterar dados na tabela, você pode sincronizá-los em tempo real.</p>
+                <div>
+                    <label class="block font-bold uppercase text-slate-700 mb-1">URL do Apps Script</label>
+                    <input type="url" id="sheetsWebhookUrl" class="w-full rounded-xl border border-slate-300 px-3 py-2 font-mono text-[11px] text-slate-800 bg-slate-50">
+                </div>
+                <div class="grid grid-cols-2 gap-3 pt-2">
+                    <button onclick="pushToGoogleSheets()" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 px-4 rounded-xl shadow-xs transition">
+                        Enviar p/ Planilha
+                    </button>
+                    <button onclick="pullFromGoogleSheets()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-4 rounded-xl shadow-xs transition">
+                        Puxar da Planilha
+                    </button>
+                </div>
+            </div>
+            <div class="px-6 py-3 bg-slate-100 border-t border-slate-200 flex justify-end">
+                <button onclick="closeCloudModal()" class="px-4 py-2 rounded-xl bg-slate-800 text-white font-bold text-xs">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Criar / Selecionar Novo Ano -->
+    <div id="newYearModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="cemig-header px-6 py-4 flex items-center justify-between text-white">
+                <h3 class="font-bold text-base flex items-center gap-2">
+                    <i data-lucide="calendar-plus" class="w-5 h-5 text-yellow-300"></i>
+                    Adicionar / Abrir Ano
+                </h3>
+                <button onclick="closeNewYearModal()" class="text-white/80 hover:text-white p-1 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form onsubmit="handleCreateYear(event)" class="p-6 space-y-4 text-xs">
+                <div>
+                    <label class="block font-bold uppercase text-slate-600 mb-1">Ano da Planilha (Ex: 2027) *</label>
+                    <input type="number" id="newYearInput" required min="2020" max="2050" value="2027" class="w-full rounded-xl border-2 border-emerald-600 px-3 py-2 text-base font-extrabold text-slate-900">
+                </div>
+                <div>
+                    <label class="block font-bold uppercase text-slate-600 mb-1">Leitura Inicial Base (Dezembro anterior)</label>
+                    <input type="number" id="newYearBaseReading" required step="1" value="19180" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-bold text-slate-800">
+                </div>
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-200">
+                    <button type="button" onclick="closeNewYearModal()" class="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-semibold">Cancelar</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold shadow-md">Criar Ano</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de Adicionar / Editar Mês -->
+    <div id="entryModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="cemig-header px-6 py-4 flex items-center justify-between text-white">
+                <h3 id="modalTitle" class="font-bold text-base flex items-center gap-2">
+                    <i data-lucide="file-spreadsheet" class="w-5 h-5 text-yellow-300"></i>
+                    Editar Lançamento Mensal
+                </h3>
+                <button onclick="closeModal()" class="text-white/80 hover:text-white p-1 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form id="entryForm" onsubmit="saveEntry(event)" class="p-6 space-y-4 text-xs">
+                <input type="hidden" id="editIndex">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold uppercase text-slate-600 mb-1">Mês *</label>
+                        <input type="text" id="fieldMes" required class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold text-slate-900">
+                    </div>
+                    <div>
+                        <label class="block font-bold uppercase text-slate-600 mb-1">Status (Cor)</label>
+                        <select id="fieldCor" class="w-full rounded-xl border border-slate-300 px-3 py-2 font-semibold text-slate-800">
+                            <option value="verde">🟢 Verde (Conferido)</option>
+                            <option value="branco">⚪ Branco (Normal)</option>
+                            <option value="amarelo">🟡 Amarelo (Revisão)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold uppercase text-slate-600 mb-1">Data Leitura</label>
+                        <input type="date" id="fieldDataLeitura" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-800">
+                    </div>
+                    <div>
+                        <label class="block font-bold uppercase text-emerald-800 mb-1">Leitura Medidor (kWh) *</label>
+                        <input type="number" id="fieldLeitura" required step="1" class="w-full rounded-xl border-2 border-emerald-600 px-3 py-2 font-extrabold text-slate-900">
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label class="block font-bold uppercase text-slate-600 mb-1">Valor (R$)</label>
+                        <input type="number" id="fieldValor" step="0.01" class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold text-slate-800">
+                    </div>
+                    <div>
+                        <label class="block font-bold uppercase text-amber-800 mb-1">TAXA ILUM. (R$)</label>
+                        <input type="number" id="fieldTaxaIlum" step="0.01" class="w-full rounded-xl border-2 border-amber-400 bg-amber-50/40 px-3 py-2 font-bold text-slate-900">
+                    </div>
+                    <div>
+                        <label class="block font-bold uppercase text-slate-600 mb-1">Vencimento</label>
+                        <input type="date" id="fieldVencimento" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-800">
+                    </div>
+                </div>
+                <div>
+                    <label class="block font-bold uppercase text-slate-600 mb-1">Observações</label>
+                    <input type="text" id="fieldObs" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-800" placeholder="Ex: Fatura revisada">
+                </div>
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-200">
+                    <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-semibold">Cancelar</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold shadow-md">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl text-sm font-medium flex items-center gap-2 transition-all duration-300 opacity-0 pointer-events-none z-50">
+        <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
+        <span id="toastText">Salvo com sucesso!</span>
+    </div>
+
+    <script>
+        const FIXED_GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbzh-IuEM9ok4W08jDRG0TYr2MOaALTClBpF8Gp0RxoD-BZGbhSmQ7X-saFaXvoNJNiPQQ/exec";
+        const STORAGE_KEY = "cemig_app_years_data_v2";
+        const CURRENT_YEAR_KEY = "cemig_app_current_year_v2";
+
+        let currentYear = "2026";
+        let allYearsData = {
+            "2026": [
+                { id: "nov_25", mes: "nov/25", dataLeitura: "", valor: null, taxaIlum: null, vencimento: "", leitura: 17970, consumo: null, dias: null, cor: "verde", obs: "" },
+                { id: "dez_25", mes: "dez/25", dataLeitura: "2025-12-20", valor: 96.25, taxaIlum: 24.50, vencimento: "2026-01-06", leitura: 18055, consumo: 85, dias: 25, cor: "verde", obs: "" },
+                { id: "jan_26", mes: "JANEIRO", dataLeitura: "2026-01-22", valor: 172.83, taxaIlum: 31.20, vencimento: "2026-02-06", leitura: 18194, consumo: 139, dias: 33, cor: "verde", obs: "" },
+                { id: "fev_26", mes: "FEVEREIRO", dataLeitura: "2026-02-21", valor: 152.51, taxaIlum: 28.90, vencimento: "2026-03-06", leitura: 18313, consumo: 119, dias: 30, cor: "verde", obs: "" },
+                { id: "mar_26", mes: "MARÇO", dataLeitura: "2026-03-23", valor: 109.18, taxaIlum: 0.00, vencimento: "2026-04-07", leitura: 18410, consumo: 97, dias: 30, cor: "verde", obs: "Isento IP" },
+                { id: "abr_26_1", mes: "ABRIL", dataLeitura: "2026-04-22", valor: 142.36, taxaIlum: 26.40, vencimento: "2026-05-07", leitura: 18520, consumo: 110, dias: 30, cor: "amarelo", obs: "1ª leitura (contestada)" },
+                { id: "abr_26_2", mes: "ABRIL", dataLeitura: "2026-04-22", valor: 102.45, taxaIlum: 0.00, vencimento: "2026-05-12", leitura: 18501, consumo: 91, dias: 30, cor: "amarelo", obs: "Fatura revisada (Isento)" },
+                { id: "mai_26", mes: "MAIO", dataLeitura: "2026-05-20", valor: 83.45, taxaIlum: 0.00, vencimento: "2026-06-06", leitura: 18574, consumo: 73, dias: 28, cor: "verde", obs: "Isento IP" },
+                { id: "jun_26", mes: "JUNHO", dataLeitura: "2026-06-22", valor: 150.67, taxaIlum: 27.80, vencimento: "2026-07-06", leitura: 18683, consumo: 109, dias: 33, cor: "verde", obs: "" },
+                { id: "jul_26", mes: "JULHO", dataLeitura: "2026-07-09", valor: 60.42, taxaIlum: 0.00, vencimento: "2026-08-06", leitura: 18727, consumo: 44, dias: 17, cor: "verde", obs: "Ciclo curto / Isento" },
+                { id: "ago_26", mes: "AGOSTO", dataLeitura: "2026-08-10", valor: 202.75, taxaIlum: 38.50, vencimento: "2026-09-06", leitura: 18831, consumo: 104, dias: 32, cor: "verde", obs: "" },
+                { id: "set_26", mes: "SETEMBRO", dataLeitura: "2026-09-09", valor: 117.25, taxaIlum: 0.00, vencimento: "2026-10-06", leitura: 18931, consumo: 100, dias: 31, cor: "verde", obs: "Isento IP (100 kWh)" },
+                { id: "out_26", mes: "OUTUBRO", dataLeitura: "2026-10-08", valor: 162.65, taxaIlum: 30.10, vencimento: "2026-11-06", leitura: 19052, consumo: 121, dias: 29, cor: "verde", obs: "" },
+                { id: "nov_26", mes: "NOVEMBRO", dataLeitura: "2026-11-06", valor: null, taxaIlum: null, vencimento: "", leitura: 19179, consumo: 127, dias: 30, cor: "verde", obs: "" },
+                { id: "dez_26", mes: "DEZEMBRO", dataLeitura: "", valor: null, taxaIlum: null, vencimento: "", leitura: 19180, consumo: 1, dias: 1, cor: "branco", obs: "" }
+            ]
+        };
+
+        let records = allYearsData[currentYear];
+        let chartVC = null;
+        let chartMD = null;
+
+        window.onload = function() {
+            loadRecords();
+            pullFromGoogleSheets(true).then(() => {
+                renderYearSelector();
+                renderAll();
+                runSimulator();
+            }).catch(() => {
+                renderYearSelector();
+                renderAll();
+                runSimulator();
+            });
+            lucide.createIcons();
+        };
+
+        function loadRecords() {
+            try {
+                const savedYears = localStorage.getItem(STORAGE_KEY);
+                const savedCurr = localStorage.getItem(CURRENT_YEAR_KEY);
+                if (savedYears) allYearsData = JSON.parse(savedYears);
+                if (savedCurr && allYearsData[savedCurr]) currentYear = savedCurr;
+                records = allYearsData[currentYear];
+            } catch(e) {}
+        }
+
+        function saveRecords() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(allYearsData));
+                localStorage.setItem(CURRENT_YEAR_KEY, currentYear);
+            } catch(e) {}
+        }
+
+        async function pushToGoogleSheets() {
+            try {
+                const formattedDb = {};
+                Object.keys(allYearsData).forEach(yr => {
+                    formattedDb[yr] = {
+                        rows: allYearsData[yr].map(r => ({
+                            mes: r.mes, dataLeitura: r.dataLeitura, valor: r.valor, taxaIlum: r.taxaIlum,
+                            vencimento: r.vencimento, leitura: r.leitura, obs: r.obs, rowStyle: r.cor
+                        }))
+                    };
+                });
+                await fetch(FIXED_GOOGLE_SHEETS_URL, {
+                    method: "POST", mode: "no-cors",
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify({ action: "syncAll", currentYear, db: formattedDb, updatedAt: new Date().toISOString() })
+                });
+                showToast("Sincronizado com o Google Sheets!");
+            } catch(err) {
+                showToast("Erro ao sincronizar.");
+            }
+        }
+
+        async function pullFromGoogleSheets(silent = false) {
+            try {
+                const res = await fetch(FIXED_GOOGLE_SHEETS_URL);
+                const data = await res.json();
+                if (data && data.ok && data.db) {
+                    const restored = {};
+                    Object.keys(data.db).forEach(yr => {
+                        restored[yr] = data.db[yr].rows.map((r, idx) => ({
+                            id: `${r.mes.toLowerCase().replace(/[^a-z0-9]/g, '')}_${yr}_${idx}`,
+                            mes: r.mes || "", dataLeitura: r.dataLeitura || "",
+                            valor: r.valor !== "" && r.valor !== null ? Number(r.valor) : null,
+                            taxaIlum: r.taxaIlum !== "" && r.taxaIlum !== null ? Number(r.taxaIlum) : null,
+                            vencimento: r.vencimento || "",
+                            leitura: r.leitura !== "" && r.leitura !== null ? Number(r.leitura) : null,
+                            cor: r.rowStyle || "branco", obs: r.obs || ""
+                        }));
+                    });
+                    if (Object.keys(restored).length > 0) {
+                        allYearsData = restored;
+                        if (!allYearsData[currentYear]) currentYear = Object.keys(allYearsData)[0];
+                        records = allYearsData[currentYear];
+                        saveRecords();
+                        renderYearSelector();
+                        renderAll();
+                        if (!silent) showToast("Dados atualizados do Google Sheets!");
+                    }
+                }
+            } catch(err) {
+                if (!silent) showToast("Erro ao carregar do Google Sheets.");
+            }
+        }
+
+        function renderYearSelector() {
+            const sel = document.getElementById("yearSelector");
+            if (!sel) return;
+            sel.innerHTML = "";
+            Object.keys(allYearsData).sort().forEach(yr => {
+                const opt = document.createElement("option");
+                opt.value = yr;
+                opt.textContent = yr;
+                if (yr === currentYear) opt.selected = true;
+                sel.appendChild(opt);
+            });
+            document.getElementById("headerTitleYear").textContent = `CEMIG - ${currentYear}`;
+            document.getElementById("tableBannerTitle").textContent = `CEMIG - ${currentYear}`;
+        }
+
+        function switchYear(yr) {
+            if (allYearsData[yr]) {
+                currentYear = yr;
+                records = allYearsData[currentYear];
+                saveRecords();
+                renderYearSelector();
+                renderAll();
+            }
+        }
+
+        function stepYear(dir) {
+            const years = Object.keys(allYearsData).sort();
+            const idx = years.indexOf(currentYear);
+            const nextIdx = idx + dir;
+            if (nextIdx >= 0 && nextIdx < years.length) {
+                switchYear(years[nextIdx]);
+            }
+        }
+
+        function createNewYearPrompt() {
+            document.getElementById("newYearModal").classList.remove("hidden");
+            document.getElementById("newYearModal").classList.add("flex");
+            const nextYr = String(Number(currentYear) + 1);
+            document.getElementById("newYearInput").value = nextYr;
+            const lastRow = records[records.length - 1];
+            if (lastRow && lastRow.leitura) {
+                document.getElementById("newYearBaseReading").value = lastRow.leitura;
+            }
+        }
+
+        function closeNewYearModal() {
+            document.getElementById("newYearModal").classList.add("hidden");
+            document.getElementById("newYearModal").classList.remove("flex");
+        }
+
+        function handleCreateYear(e) {
+            e.preventDefault();
+            const yr = document.getElementById("newYearInput").value.trim();
+            const baseRead = Number(document.getElementById("newYearBaseReading").value) || 19180;
+            if (!yr) return;
+
+            if (!allYearsData[yr]) {
+                allYearsData[yr] = [
+                    { id: `dez_ant_${yr}`, mes: `dez/${Number(yr)-1}`, dataLeitura: "", valor: null, taxaIlum: null, vencimento: "", leitura: baseRead, cor: "verde", obs: "Leitura base anterior" },
+                    { id: `jan_${yr}`, mes: "JANEIRO", dataLeitura: "", valor: null, taxaIlum: null, vencimento: "", leitura: null, cor: "branco", obs: "" },
+                    { id: `fev_${yr}`, mes: "FEVEREIRO", dataLeitura: "", valor: null, taxaIlum: null, vencimento: "", leitura: null, cor: "branco", obs: "" },
+                    { id: `mar_${yr}`, mes: "MARÇO", dataLeitura: "", valor: null, taxaIlum: null, vencimento: "", leitura: null, cor: "branco", obs: "" },
+                    { id: `abr_${yr}`, mes: "ABRIL", dataLeitura: "", valor: null, taxaIlum: null, vencimento: "", leitura: null, cor: "branco", obs: "" },
+                    { id: `mai_${yr}`, mes: "MAIO", dataLeitura: "", valor: null, taxaIlum: null, vencimento: "", leitura: null, cor: "branco", obs: "" },
+                    { id: `jun_${yr}`, mes: "JUNHO", dataLeitura: "", valor: null, taxaIlum: null, vencimento: "", leitura: null, cor: "branco", obs: "" },
+                    { id: `jul_${yr}`, mes: "JULHO", dataLeitura: "", valor: null, taxaIlum: null, vencimento: "", leitura: null, cor: "branco", obs: "" },
+                    { id: `ago_${yr}`, mes: "AGOSTO", dataLeitura: "", valor: null, taxaIlum: null, vencimento: "", leitura: null, cor: "branco", obs: "" },
+                    { id: `set_${yr}`, mes: "SETEMBRO", dataLeitura: "", valor: null, taxaIlum: null, vencimento: "", leitura: null, cor: "branco", obs: "" },
+                    { id: `out_${yr}`, mes: "OUTUBRO", dataLeitura: "", valor: null, taxaIlum: null, vencimento: "", leitura: null, cor: "branco", obs: "" },
+                    { id: `nov_${yr}`, mes: "NOVEMBRO", dataLeitura: "", valor: null, taxaIlum: null, vencimento: "", leitura: null, cor: "branco", obs: "" },
+                    { id: `dez_${yr}`, mes: "DEZEMBRO", dataLeitura: "", valor: null, taxaIlum: null, vencimento: "", leitura: null, cor: "branco", obs: "" }
+                ];
+            }
+            currentYear = yr;
+            records = allYearsData[currentYear];
+            saveRecords();
+            closeNewYearModal();
+            renderYearSelector();
+            renderAll();
+            pushToGoogleSheets();
+        }
+
+        function calculateMetrics() {
+            let prevR = null;
+            let prevD = null;
+            let totalVal = 0;
+            let totalTaxaIlum = 0;
+            let countTaxaIlum = 0;
+            let totalCons = 0;
+            let totalDays = 0;
+            let countVal = 0;
+            let isentosCount = 0;
+            let totalValidRows = 0;
+
+            const ignoreAbrilReplaced = document.getElementById("ignoreReplacedToggle")?.checked ?? true;
+
+            records.forEach((r, idx) => {
+                if (r.leitura !== null && !isNaN(r.leitura)) {
+                    if (prevR !== null && r.dataLeitura && prevD) {
+                        const d1 = new Date(prevD);
+                        const d2 = new Date(r.dataLeitura);
+                        const diffTime = d2 - d1;
+                        r.dias = Math.round(diffTime / (1000 * 60 * 60 * 24));
+                    } else {
+                        r.dias = r.dias || 0;
+                    }
+
+                    if (idx > 0 && prevR !== null) {
+                        let isAprilReplacedChild = (ignoreAbrilReplaced && currentYear === "2026" && idx === 6);
+                        let isAprilFirstChild = (ignoreAbrilReplaced && currentYear === "2026" && idx === 5);
+
+                        if (isAprilReplacedChild) {
+                            const aprilFirstRow = records[5];
+                            const marchRow = records[4];
+                            if (marchRow && marchRow.leitura !== null) {
+                                r.consumo = r.leitura - marchRow.leitura;
+                            } else {
+                                r.consumo = r.leitura - prevR;
+                            }
+                        } else if (isAprilFirstChild) {
+                            r.consumo = r.leitura - prevR;
+                        } else {
+                            if (ignoreAbrilReplaced && currentYear === "2026" && idx === 7) {
+                                const abrilRevisadaRow = records[6];
+                                if (abrilRevisadaRow && abrilRevisadaRow.leitura !== null) {
+                                    r.consumo = r.leitura - abrilRevisadaRow.leitura;
+                                } else {
+                                    r.consumo = r.leitura - prevR;
+                                }
+                            } else {
+                                r.consumo = r.leitura - prevR;
+                            }
+                        }
+                    } else {
+                        r.consumo = 0;
+                    }
+
+                    if (r.consumo > 0 && r.dias > 0) {
+                        r.media = r.consumo / r.dias;
+                    } else {
+                        r.media = 0;
+                    }
+
+                    if (idx > 0) {
+                        totalValidRows++;
+                        if (r.valor !== null && !isNaN(r.valor)) {
+                            totalVal += r.valor;
+                            countVal++;
+                        }
+                        if (r.taxaIlum !== null && !isNaN(r.taxaIlum)) {
+                            totalTaxaIlum += r.taxaIlum;
+                            if (r.taxaIlum > 0) countTaxaIlum++;
+                        }
+                        if (r.consumo !== null && !isNaN(r.consumo)) {
+                            totalCons += r.consumo;
+                        }
+                        if (r.dias !== null && !isNaN(r.dias)) {
+                            totalDays += r.dias;
+                        }
+                        if (r.consumo !== null && r.consumo <= 100) {
+                            isentosCount++;
+                        }
+                    }
+                    prevR = r.leitura;
+                    if (r.dataLeitura) prevD = r.dataLeitura;
+                } else {
+                    r.consumo = null;
+                    r.dias = null;
+                    r.media = null;
+                }
+            });
+
+            return { totalVal, totalTaxaIlum, countTaxaIlum, totalCons, totalDays, countVal, isentosCount, totalValidRows };
+        }
+
+        function renderAll() {
+            const metrics = calculateMetrics();
+            const tbody = document.getElementById("tableBody");
+            const tfoot = document.getElementById("tableFooter");
+            if (!tbody) return;
+            tbody.innerHTML = "";
+
+            records.forEach((r, idx) => {
+                const tr = document.createElement("tr");
+                let rowBgClass = "row-branco";
+                if (r.cor === "verde") rowBgClass = "row-verde";
+                if (r.cor === "amarelo") rowBgClass = "row-amarelo";
+                tr.className = `${rowBgClass} border-b border-slate-300 transition text-xs`;
+
+                const isIsento = (r.consumo !== null && r.consumo <= 100 && idx > 0);
+
+                tr.innerHTML = `
+                    <td class="py-2 px-1 border-r border-slate-300 text-left pl-2.5 font-bold text-slate-900">${r.mes || ""}</td>
+                    <td class="py-2 px-1 border-r border-slate-300">
+                        <input type="date" value="${r.dataLeitura || ''}" onchange="updateCellField(${idx}, 'dataLeitura', this.value)" class="sheet-input compact-date text-center font-medium text-slate-800 text-[11px] py-1">
+                    </td>
+                    <td class="py-2 px-1 border-r border-slate-300">
+                        <input type="number" step="0.01" value="${r.valor !== null ? r.valor : ''}" placeholder="0,00" onchange="updateCellField(${idx}, 'valor', this.value)" class="sheet-input text-center font-bold text-slate-900 text-xs py-1">
+                    </td>
+                    <td class="py-2 px-1 border-r border-slate-300 bg-amber-50/50">
+                        <input type="number" step="0.01" value="${r.taxaIlum !== null ? r.taxaIlum : ''}" placeholder="${isIsento ? '0,00 (Isento)' : '0,00'}" onchange="updateCellField(${idx}, 'taxaIlum', this.value)" class="sheet-input text-center font-bold text-amber-900 text-xs py-1">
+                    </td>
+                    <td class="py-2 px-1 border-r border-slate-300">
+                        <input type="date" value="${r.vencimento || ''}" onchange="updateCellField(${idx}, 'vencimento', this.value)" class="sheet-input compact-date text-center font-medium text-slate-800 text-[11px] py-1">
+                    </td>
+                    <td class="py-2 px-1 border-r border-slate-300 bg-emerald-50/60 font-extrabold">
+                        <input type="number" step="1" value="${r.leitura !== null ? r.leitura : ''}" placeholder="Leitura" onchange="updateCellField(${idx}, 'leitura', this.value)" class="sheet-input text-center font-extrabold text-emerald-900 text-xs py-1 no-spin">
+                    </td>
+                    <td class="py-2 px-1 border-r border-slate-300 font-extrabold text-slate-900">
+                        ${r.consumo !== null && idx > 0 ? `
+                            <div class="flex flex-col items-center justify-center">
+                                <span>${r.consumo} kWh</span>
+                                ${isIsento ? `<span class="text-[9px] bg-emerald-600 text-white px-1.5 py-0.2 rounded-full font-bold">Isento IP</span>` : `<span class="text-[9px] text-slate-500 font-medium">+${r.consumo - 100} kWh</span>`}
+                            </div>
+                        ` : (idx === 0 ? `<span class="text-slate-400 font-normal">Base</span>` : `-`)}
+                    </td>
+                    <td class="py-2 px-1 border-r border-slate-300 font-semibold text-slate-700">
+                        ${r.dias !== null && idx > 0 ? `${r.dias}` : `-`}
+                    </td>
+                    <td class="py-2 px-1 border-r border-slate-300 font-bold text-slate-800">
+                        ${r.media !== null && idx > 0 ? `${r.media.toFixed(3)}` : `-`}
+                    </td>
+                    <td class="py-2 px-1 border-r border-slate-300 text-left">
+                        <input type="text" value="${r.obs || ''}" placeholder="+ Nota..." onchange="updateCellField(${idx}, 'obs', this.value)" class="sheet-input text-left text-slate-700 text-[11px] py-1 px-1">
+                    </td>
+                    <td class="py-2 px-1">
+                        <div class="flex items-center justify-center gap-1">
+                            <button onclick="openModal(${idx})" class="p-1 hover:bg-slate-200 rounded text-slate-600 transition" title="Editar completo"><i data-lucide="edit" class="w-3.5 h-3.5"></i></button>
+                            <button onclick="deleteRow(${idx})" class="p-1 hover:bg-red-200 rounded text-red-600 transition" title="Excluir"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Rodapé com somatórios
+            tfoot.innerHTML = `
+                <tr class="bg-slate-200 border-t-2 border-slate-400 font-extrabold text-slate-900 text-xs">
+                    <td class="py-2.5 px-2 text-left pl-3" colspan="2">TOTAL ANUAL (${currentYear})</td>
+                    <td class="py-2.5 px-1 text-center text-slate-900">R$ ${metrics.totalVal.toFixed(2)}</td>
+                    <td class="py-2.5 px-1 text-center text-amber-900">R$ ${metrics.totalTaxaIlum.toFixed(2)}</td>
+                    <td class="py-2.5 px-1 text-center" colspan="2">Consumo: ${metrics.totalCons} kWh</td>
+                    <td class="py-2.5 px-1 text-center" colspan="2">Média: ${metrics.totalDays > 0 ? (metrics.totalCons / (metrics.totalDays/30)).toFixed(1) : 0} kWh/mês</td>
+                    <td class="py-2.5 px-1 text-center" colspan="3">${metrics.isentosCount} meses isentos de IP</td>
+                </tr>
+            `;
+
+            // Atualiza KPIs do topo
+            document.getElementById("kpiTotalValor").textContent = `R$ ${metrics.totalVal.toFixed(2)}`;
+            document.getElementById("kpiMediaValor").textContent = `Média: R$ ${metrics.countVal > 0 ? (metrics.totalVal / metrics.countVal).toFixed(2) : '0,00'}/mês`;
+            document.getElementById("kpiTotalTaxaIlum").textContent = `R$ ${metrics.totalTaxaIlum.toFixed(2)}`;
+            document.getElementById("kpiQtdTaxaIlum").textContent = `${metrics.countTaxaIlum} meses cobrados`;
+            document.getElementById("kpiTotalConsumo").textContent = `${metrics.totalCons} kWh`;
+            document.getElementById("kpiMediaConsumo").textContent = `Média: ${metrics.totalValidRows > 0 ? Math.round(metrics.totalCons / metrics.totalValidRows) : 0} kWh/mês`;
+            
+            const geralMediaDiaria = metrics.totalDays > 0 ? (metrics.totalCons / metrics.totalDays).toFixed(3) : "0,000";
+            document.getElementById("kpiMediaDiaria").textContent = geralMediaDiaria;
+            document.getElementById("kpiTotalDias").textContent = `kWh/dia (${metrics.totalDays} dias)`;
+
+            const lastValid = records.slice().reverse().find(r => r.leitura !== null);
+            if (lastValid) {
+                document.getElementById("kpiUltimaLeitura").textContent = lastValid.leitura.toLocaleString('pt-BR');
+                document.getElementById("kpiDataUltimaLeitura").textContent = lastValid.dataLeitura ? `Em ${lastValid.dataLeitura.split('-').reverse().join('/')}` : lastValid.mes;
+            }
+
+            document.getElementById("resumoIsencaoAnual").textContent = `Isentos de IP: ${metrics.isentosCount} de ${metrics.totalValidRows} meses`;
+
+            lucide.createIcons();
+            updateCharts();
+        }
+
+        function updateCellField(idx, field, val) {
+            if (field === 'valor' || field === 'taxaIlum') {
+                records[idx][field] = val === "" ? null : Number(val);
+            } else if (field === 'leitura') {
+                records[idx][field] = val === "" ? null : Number(val);
+            } else if (field === 'obs') {
+                records[idx]['obs'] = val;
+            } else {
+                records[idx][field] = val;
+            }
+            saveRecords();
+            renderAll();
+            pushToGoogleSheets();
+        }
+
+        function openModal(idx = null) {
+            document.getElementById("entryModal").classList.remove("hidden");
+            document.getElementById("entryModal").classList.add("flex");
+            if (idx !== null) {
+                const r = records[idx];
+                document.getElementById("editIndex").value = idx;
+                document.getElementById("modalTitle").innerHTML = `<i data-lucide="file-spreadsheet" class="w-5 h-5 text-yellow-300"></i> Editar: ${r.mes}`;
+                document.getElementById("fieldMes").value = r.mes || "";
+                document.getElementById("fieldCor").value = r.cor || "branco";
+                document.getElementById("fieldDataLeitura").value = r.dataLeitura || "";
+                document.getElementById("fieldLeitura").value = r.leitura !== null ? r.leitura : "";
+                document.getElementById("fieldValor").value = r.valor !== null ? r.valor : "";
+                document.getElementById("fieldTaxaIlum").value = r.taxaIlum !== null ? r.taxaIlum : "";
+                document.getElementById("fieldVencimento").value = r.vencimento || "";
+                document.getElementById("fieldObs").value = r.obs || "";
+            } else {
+                document.getElementById("editIndex").value = "";
+                document.getElementById("modalTitle").innerHTML = `<i data-lucide="plus-circle" class="w-5 h-5 text-yellow-300"></i> Novo Lançamento`;
+                document.getElementById("entryForm").reset();
+                document.getElementById("fieldCor").value = "verde";
+            }
+            lucide.createIcons();
+        }
+
+        function closeModal() {
+            document.getElementById("entryModal").classList.add("hidden");
+            document.getElementById("entryModal").classList.remove("flex");
+        }
+
+        function saveEntry(e) {
+            e.preventDefault();
+            const idx = document.getElementById("editIndex").value;
+            const rowData = {
+                id: idx !== "" ? records[idx].id : `item_${Date.now()}`,
+                mes: document.getElementById("fieldMes").value,
+                cor: document.getElementById("fieldCor").value,
+                dataLeitura: document.getElementById("fieldDataLeitura").value,
+                leitura: Number(document.getElementById("fieldLeitura").value) || null,
+                valor: document.getElementById("fieldValor").value ? Number(document.getElementById("fieldValor").value) : null,
+                taxaIlum: document.getElementById("fieldTaxaIlum").value ? Number(document.getElementById("fieldTaxaIlum").value) : null,
+                vencimento: document.getElementById("fieldVencimento").value,
+                obs: document.getElementById("fieldObs").value
+            };
+
+            if (idx !== "") {
+                records[idx] = { ...records[idx], ...rowData };
+            } else {
+                records.push(rowData);
+            }
+            saveRecords();
+            closeModal();
+            renderAll();
+            pushToGoogleSheets();
+        }
+
+        function deleteRow(idx) {
+            if (confirm("Deseja excluir este mês?")) {
+                records.splice(idx, 1);
+                saveRecords();
+                renderAll();
+                pushToGoogleSheets();
+            }
+        }
+
+        function runSimulator() {
+            const baseL = Number(document.getElementById("simBaseLeitura").value) || 0;
+            const atualL = Number(document.getElementById("simAtualLeitura").value) || 0;
+            const cicloDias = Number(document.getElementById("simCicloDias").value) || 30;
+
+            const d1 = new Date(document.getElementById("simBaseData").value);
+            const d2 = new Date(document.getElementById("simAtualData").value);
+            let diffDays = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+            if (diffDays <= 0) diffDays = 1;
+
+            const consumo = atualL >= baseL ? atualL - baseL : 0;
+            const mediaDiaria = consumo / diffDays;
+            const saldo100 = 100 - consumo;
+
+            document.getElementById("simResultConsumo").textContent = `${consumo} kWh em ${diffDays} dia(s)`;
+            document.getElementById("simResultMedia").textContent = `${mediaDiaria.toFixed(3)} kWh/dia`;
+            
+            const saldoEl = document.getElementById("simResultSaldo100");
+            if (saldo100 >= 0) {
+                saldoEl.textContent = `Restam ${saldo100} kWh`;
+                saldoEl.className = "font-extrabold text-[11px] bg-emerald-800 text-emerald-100 px-2 py-0.5 rounded";
+            } else {
+                saldoEl.textContent = `Ultrapassou ${Math.abs(saldo100)} kWh`;
+                saldoEl.className = "font-extrabold text-[11px] bg-red-800 text-red-100 px-2 py-0.5 rounded";
+            }
+
+            const custoEstimado = consumo * 1.32;
+            document.getElementById("simResultValorParcial").textContent = `R$ ${custoEstimado.toFixed(2)}`;
+        }
+
+        function updateCharts() {
+            const valid = records.filter((r, idx) => idx > 0 && r.consumo !== null);
+            const labels = valid.map(r => r.mes);
+            const valores = valid.map(r => r.valor || 0);
+            const consumos = valid.map(r => r.consumo || 0);
+            const medias = valid.map(r => r.media || 0);
+
+            // Gráfico 1
+            const ctx1 = document.getElementById("chartValorConsumo")?.getContext("2d");
+            if (ctx1) {
+                if (chartVC) chartVC.destroy();
+                chartVC = new Chart(ctx1, {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [
+                            { label: 'Valor (R$)', data: valores, backgroundColor: '#059669', yAxisID: 'y', borderRadius: 4 },
+                            { label: 'Consumo (kWh)', data: consumos, type: 'line', borderColor: '#3b82f6', backgroundColor: '#3b82f6', yAxisID: 'y1', tension: 0.2 }
+                        ]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        scales: {
+                            y: { type: 'linear', position: 'left', grid: { display: false } },
+                            y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false } }
+                        }
+                    }
+                });
+            }
+
+            // Gráfico 2
+            const ctx2 = document.getElementById("chartMediaDiaria")?.getContext("2d");
+            if (ctx2) {
+                if (chartMD) chartMD.destroy();
+                chartMD = new Chart(ctx2, {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [
+                            { label: 'Média Diária', data: medias, borderColor: '#d97706', backgroundColor: 'rgba(217, 119, 6, 0.1)', fill: true, tension: 0.3 }
+                        ]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        scales: { y: { beginAtZero: true, grid: { display: false } } }
+                    }
+                });
+            }
+        }
+
+        function openCloudModal() {
+            document.getElementById("sheetsWebhookUrl").value = FIXED_GOOGLE_SHEETS_URL;
+            document.getElementById("cloudModal").classList.remove("hidden");
+            document.getElementById("cloudModal").classList.add("flex");
+        }
+        function closeCloudModal() {
+            document.getElementById("cloudModal").classList.add("hidden");
+            document.getElementById("cloudModal").classList.remove("flex");
+        }
+        function showToast(text) {
+            const t = document.getElementById("toast");
+            document.getElementById("toastText").textContent = text;
+            t.classList.remove("opacity-0", "translate-y-2");
+            setTimeout(() => t.classList.add("opacity-0", "translate-y-2"), 3000);
+        }
+    </script>
+</body>
+</html>
