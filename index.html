@@ -100,7 +100,7 @@
                             <span id="cloudStatusText">Google Drive: Conectado</span>
                         </button>
                     </div>
-                    <p class="text-[11px] sm:text-xs text-emerald-100/90">Edite <strong>Leitura</strong>, <strong>Valor</strong>, <strong>TAXA ILUM.</strong> ou <strong>Observações</strong> direto na tabela</p>
+                    <p class="text-[11px] sm:text-xs text-emerald-100/90">Edite <strong>Leitura</strong>, <strong>Dias</strong>, <strong>Valor</strong>, <strong>TAXA ILUM.</strong> ou <strong>Observações</strong> direto na tabela</p>
                 </div>
             </div>
 
@@ -267,9 +267,14 @@
                                 </div>
                             </th>
                             <th class="w-[9%] py-2 px-1 border-r border-slate-300">Consumo</th>
-                            <th class="w-[5%] py-2 px-1 border-r border-slate-300">Dias</th>
+                            <th class="w-[6%] py-2 px-1 border-r border-slate-300 bg-amber-100/70 text-amber-950" title="Clique para alterar os dias manualmente e ver a média parcial do mês">
+                                <div class="flex items-center justify-center gap-0.5">
+                                    <span>Dias</span>
+                                    <i data-lucide="edit-3" class="w-3 h-3 text-amber-800"></i>
+                                </div>
+                            </th>
                             <th class="w-[8%] py-2 px-1 border-r border-slate-300">Média</th>
-                            <th class="w-[17.5%] py-2 px-1.5 border-r border-slate-300 text-left">Observações</th>
+                            <th class="w-[16.5%] py-2 px-1.5 border-r border-slate-300 text-left">Observações</th>
                             <th class="w-[5%] py-2 px-1">Ações</th>
                         </tr>
                     </thead>
@@ -475,14 +480,18 @@
                         </select>
                     </div>
                 </div>
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-3 gap-3">
                     <div>
                         <label class="block font-bold uppercase text-slate-600 mb-1">Data Leitura</label>
                         <input type="date" id="fieldDataLeitura" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-800">
                     </div>
                     <div>
-                        <label class="block font-bold uppercase text-emerald-800 mb-1">Leitura Medidor (kWh) *</label>
+                        <label class="block font-bold uppercase text-emerald-800 mb-1">Leitura (kWh) *</label>
                         <input type="number" id="fieldLeitura" required step="1" class="w-full rounded-xl border-2 border-emerald-600 px-3 py-2 font-extrabold text-slate-900">
+                    </div>
+                    <div>
+                        <label class="block font-bold uppercase text-amber-800 mb-1">Dias (Parcial/Ciclo)</label>
+                        <input type="number" id="fieldDias" step="1" min="1" placeholder="Auto" class="w-full rounded-xl border-2 border-amber-500 bg-amber-50/40 px-3 py-2 font-extrabold text-slate-900">
                     </div>
                 </div>
                 <div class="grid grid-cols-3 gap-3">
@@ -585,7 +594,8 @@
                     formattedDb[yr] = {
                         rows: allYearsData[yr].map(r => ({
                             mes: r.mes, dataLeitura: r.dataLeitura, valor: r.valor, taxaIlum: r.taxaIlum,
-                            vencimento: r.vencimento, leitura: r.leitura, obs: r.obs, rowStyle: r.cor
+                            vencimento: r.vencimento, leitura: r.leitura, dias: r.dias,
+                            diasManual: !!r._diasEditadoManual, obs: r.obs, rowStyle: r.cor
                         }))
                     };
                 });
@@ -607,15 +617,27 @@
                 if (data && data.ok && data.db) {
                     const restored = {};
                     Object.keys(data.db).forEach(yr => {
-                        restored[yr] = data.db[yr].rows.map((r, idx) => ({
-                            id: `${r.mes.toLowerCase().replace(/[^a-z0-9]/g, '')}_${yr}_${idx}`,
-                            mes: r.mes || "", dataLeitura: r.dataLeitura || "",
-                            valor: r.valor !== "" && r.valor !== null ? Number(r.valor) : null,
-                            taxaIlum: r.taxaIlum !== "" && r.taxaIlum !== null ? Number(r.taxaIlum) : null,
-                            vencimento: r.vencimento || "",
-                            leitura: r.leitura !== "" && r.leitura !== null ? Number(r.leitura) : null,
-                            cor: r.rowStyle || "branco", obs: r.obs || ""
-                        }));
+                        const localYr = allYearsData[yr] || [];
+                        restored[yr] = data.db[yr].rows.map((r, idx) => {
+                            const localRow = localYr[idx] || {};
+                            const restoredDias = r.dias !== undefined && r.dias !== "" && r.dias !== null
+                                ? Number(r.dias)
+                                : (localRow.dias !== undefined ? localRow.dias : null);
+                            const restoredManual = r.diasManual !== undefined
+                                ? !!r.diasManual
+                                : (localRow._diasEditadoManual || (restoredDias !== null && !r.dataLeitura));
+                            return {
+                                id: `${(r.mes || 'mes').toLowerCase().replace(/[^a-z0-9]/g, '')}_${yr}_${idx}`,
+                                mes: r.mes || "", dataLeitura: r.dataLeitura || "",
+                                valor: r.valor !== "" && r.valor !== null ? Number(r.valor) : null,
+                                taxaIlum: r.taxaIlum !== "" && r.taxaIlum !== null ? Number(r.taxaIlum) : null,
+                                vencimento: r.vencimento || "",
+                                leitura: r.leitura !== "" && r.leitura !== null ? Number(r.leitura) : null,
+                                dias: restoredDias,
+                                _diasEditadoManual: restoredManual,
+                                cor: r.rowStyle || "branco", obs: r.obs || ""
+                            };
+                        });
                     });
                     if (Object.keys(restored).length > 0) {
                         allYearsData = restored;
@@ -730,13 +752,16 @@
 
             records.forEach((r, idx) => {
                 if (r.leitura !== null && !isNaN(r.leitura)) {
-                    if (prevR !== null && r.dataLeitura && prevD) {
+                    // Se o usuário digitou os dias manualmente, respeita o número digitado;
+                    // caso contrário, calcula pela diferença de datas se ambas existirem.
+                    if (!r._diasEditadoManual && prevR !== null && r.dataLeitura && prevD) {
                         const d1 = new Date(prevD);
                         const d2 = new Date(r.dataLeitura);
                         const diffTime = d2 - d1;
-                        r.dias = Math.round(diffTime / (1000 * 60 * 60 * 24));
-                    } else {
-                        r.dias = r.dias || 0;
+                        const calcDias = Math.round(diffTime / (1000 * 60 * 60 * 24));
+                        if (calcDias > 0) {
+                            r.dias = calcDias;
+                        }
                     }
 
                     if (idx > 0 && prevR !== null) {
@@ -744,7 +769,6 @@
                         let isAprilFirstChild = (ignoreAbrilReplaced && currentYear === "2026" && idx === 5);
 
                         if (isAprilReplacedChild) {
-                            const aprilFirstRow = records[5];
                             const marchRow = records[4];
                             if (marchRow && marchRow.leitura !== null) {
                                 r.consumo = r.leitura - marchRow.leitura;
@@ -769,37 +793,40 @@
                         r.consumo = 0;
                     }
 
-                    if (r.consumo > 0 && r.dias > 0) {
-                        r.media = r.consumo / r.dias;
+                    const diasNum = Number(r.dias);
+                    if (r.consumo !== null && r.consumo >= 0 && diasNum > 0) {
+                        r.media = r.consumo / diasNum;
                     } else {
                         r.media = 0;
                     }
 
                     if (idx > 0) {
-                        totalValidRows++;
-                        if (r.valor !== null && !isNaN(r.valor)) {
-                            totalVal += r.valor;
-                            countVal++;
-                        }
-                        if (r.taxaIlum !== null && !isNaN(r.taxaIlum)) {
-                            totalTaxaIlum += r.taxaIlum;
-                            if (r.taxaIlum > 0) countTaxaIlum++;
-                        }
-                        if (r.consumo !== null && !isNaN(r.consumo)) {
-                            totalCons += r.consumo;
-                        }
-                        if (r.dias !== null && !isNaN(r.dias)) {
-                            totalDays += r.dias;
-                        }
-                        if (r.consumo !== null && r.consumo <= 100) {
-                            isentosCount++;
+                        const skipInAnnualTotal = (ignoreAbrilReplaced && currentYear === "2026" && idx === 5);
+                        if (!skipInAnnualTotal) {
+                            totalValidRows++;
+                            if (r.valor !== null && !isNaN(r.valor)) {
+                                totalVal += r.valor;
+                                countVal++;
+                            }
+                            if (r.taxaIlum !== null && !isNaN(r.taxaIlum)) {
+                                totalTaxaIlum += r.taxaIlum;
+                                if (r.taxaIlum > 0) countTaxaIlum++;
+                            }
+                            if (r.consumo !== null && !isNaN(r.consumo)) {
+                                totalCons += r.consumo;
+                            }
+                            if (r.dias !== null && !isNaN(r.dias)) {
+                                totalDays += Number(r.dias);
+                            }
+                            if (r.consumo !== null && r.consumo <= 100) {
+                                isentosCount++;
+                            }
                         }
                     }
                     prevR = r.leitura;
                     if (r.dataLeitura) prevD = r.dataLeitura;
                 } else {
                     r.consumo = null;
-                    r.dias = null;
                     r.media = null;
                 }
             });
@@ -848,13 +875,13 @@
                             </div>
                         ` : (idx === 0 ? `<span class="text-slate-400 font-normal">Base</span>` : `-`)}
                     </td>
-                    <td class="py-2 px-1 border-r border-slate-300 bg-amber-50/30 font-semibold text-slate-700">
+                    <td class="py-2 px-1 border-r border-slate-300 bg-amber-100/50 font-extrabold text-amber-950">
                         ${idx > 0 ? `
-                            <input type="number" step="1" value="${r.dias !== null ? r.dias : ''}" placeholder="Dias" onchange="updateCellField(${idx}, 'dias', this.value)" class="sheet-input text-center font-bold text-slate-900 text-xs py-1 no-spin" title="Edite manualmente se quiser calcular a média parcial do mês">
+                            <input type="number" step="1" min="1" value="${r.dias !== null && r.dias !== undefined ? r.dias : ''}" placeholder="Dias" onchange="updateCellField(${idx}, 'dias', this.value)" class="sheet-input text-center font-extrabold text-amber-950 text-xs py-1 no-spin" title="Clique e digite os dias decorridos para atualizar a Média na hora">
                         ` : `-`}
                     </td>
                     <td class="py-2 px-1 border-r border-slate-300 font-bold text-slate-800">
-                        ${r.media !== null && idx > 0 ? `${r.media.toFixed(3)}` : `-`}
+                        ${r.media !== null && idx > 0 ? `${r.media.toFixed(3).replace('.', ',')}` : `-`}
                     </td>
                     <td class="py-2 px-1 border-r border-slate-300 text-left">
                         <input type="text" value="${r.obs || ''}" placeholder="+ Adicionar nota..." onchange="updateCellField(${idx}, 'obs', this.value)" class="sheet-input text-left text-slate-800 text-[11px] px-1 py-1">
@@ -885,7 +912,7 @@
                         <td class="text-center font-extrabold text-emerald-900">${records[records.length-1]?.leitura || 0} kWh</td>
                         <td class="text-center font-extrabold text-slate-900">${metrics.totalCons} kWh</td>
                         <td class="text-center font-extrabold text-slate-900">${metrics.totalDays} dias</td>
-                        <td class="text-center font-extrabold text-slate-900">${metrics.totalDays > 0 ? (metrics.totalCons / metrics.totalDays).toFixed(3) : '0,000'}</td>
+                        <td class="text-center font-extrabold text-slate-900">${metrics.totalDays > 0 ? (metrics.totalCons / metrics.totalDays).toFixed(3).replace('.', ',') : '0,000'}</td>
                         <td class="text-left font-normal text-[11px] text-slate-600 pl-2">Isentos IP (≤100 kWh): ${metrics.isentosCount} meses</td>
                         <td></td>
                     </tr>
@@ -894,7 +921,7 @@
 
             // Atualiza KPIs do Topo
             document.getElementById("kpiTotalValor").textContent = `R$ ${metrics.totalVal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            document.getElementById("kpiMediaValor").textContent = `Média: R$ ${metrics.countVal > 0 ? (metrics.totalVal / metrics.countVal).toFixed(2) : '0,00'}/mês`;
+            document.getElementById("kpiMediaValor").textContent = `Média: R$ ${metrics.countVal > 0 ? (metrics.totalVal / metrics.countVal).toFixed(2).replace('.', ',') : '0,00'}/mês`;
             
             document.getElementById("kpiTotalTaxaIlum").textContent = `R$ ${metrics.totalTaxaIlum.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
             document.getElementById("kpiQtdTaxaIlum").textContent = `${metrics.countTaxaIlum} meses cobrados`;
@@ -903,7 +930,7 @@
             document.getElementById("kpiMediaConsumo").textContent = `Média: ${metrics.totalValidRows > 0 ? Math.round(metrics.totalCons / metrics.totalValidRows) : 0} kWh/mês`;
 
             const mediaGeralDiaria = metrics.totalDays > 0 ? metrics.totalCons / metrics.totalDays : 0;
-            document.getElementById("kpiMediaDiaria").textContent = mediaGeralDiaria.toFixed(3);
+            document.getElementById("kpiMediaDiaria").textContent = mediaGeralDiaria.toFixed(3).replace('.', ',');
             document.getElementById("kpiTotalDias").textContent = `kWh/dia (${metrics.totalDays} dias)`;
 
             document.getElementById("resumoIsencaoAnual").textContent = `Isentos: ${metrics.isentosCount} de ${metrics.totalValidRows} meses`;
@@ -915,103 +942,10 @@
             }
 
             const tarifaMedia = metrics.totalCons > 0 ? metrics.totalVal / metrics.totalCons : 0;
-            document.getElementById("kpiTarifaMedia").textContent = `R$ ${tarifaMedia.toFixed(2)}`;
+            document.getElementById("kpiTarifaMedia").textContent = `R$ ${tarifaMedia.toFixed(2).replace('.', ',')}`;
 
             lucide.createIcons();
             updateCharts();
-        }
-
-        function calculateMetrics() {
-            let prevR = null;
-            let prevD = null;
-            let totalVal = 0;
-            let totalTaxaIlum = 0;
-            let countTaxaIlum = 0;
-            let totalCons = 0;
-            let totalDays = 0;
-            let countVal = 0;
-            let isentosCount = 0;
-            let totalValidRows = 0;
-
-            const ignoreAbrilReplaced = document.getElementById("ignoreReplacedToggle")?.checked ?? true;
-
-            records.forEach((r, idx) => {
-                if (r.leitura !== null && !isNaN(r.leitura)) {
-                    if (prevR !== null && r.dataLeitura && prevD) {
-                        const d1 = new Date(prevD);
-                        const d2 = new Date(r.dataLeitura);
-                        const diffTime = d2 - d1;
-                        const calcDias = Math.round(diffTime / (1000 * 60 * 60 * 24));
-                        if (!r._diasEditadoManual && (r.dias === null || r.dias === undefined || r.dias === 0)) {
-                            r.dias = calcDias;
-                        }
-                    }
-
-                    if (idx > 0 && prevR !== null) {
-                        let isAprilReplacedChild = (ignoreAbrilReplaced && currentYear === "2026" && idx === 6);
-                        let isAprilFirstChild = (ignoreAbrilReplaced && currentYear === "2026" && idx === 5);
-
-                        if (isAprilReplacedChild) {
-                            const aprilFirstRow = records[5];
-                            const marchRow = records[4];
-                            if (marchRow && marchRow.leitura !== null) {
-                                r.consumo = r.leitura - marchRow.leitura;
-                            } else {
-                                r.consumo = r.leitura - prevR;
-                            }
-                        } else if (isAprilFirstChild) {
-                            r.consumo = r.leitura - prevR;
-                        } else {
-                            if (ignoreAbrilReplaced && currentYear === "2026" && idx === 7) {
-                                const abrilRevisadaRow = records[6];
-                                if (abrilRevisadaRow && abrilRevisadaRow.leitura !== null) {
-                                    r.consumo = r.leitura - abrilRevisadaRow.leitura;
-                                } else {
-                                    r.consumo = r.leitura - prevR;
-                                }
-                            } else {
-                                r.consumo = r.leitura - prevR;
-                            }
-                        }
-                    } else {
-                        r.consumo = 0;
-                    }
-
-                    if (r.consumo > 0 && r.dias > 0) {
-                        r.media = r.consumo / r.dias;
-                    } else {
-                        r.media = 0;
-                    }
-
-                    if (idx > 0) {
-                        totalValidRows++;
-                        if (r.valor !== null && !isNaN(r.valor)) {
-                            totalVal += r.valor;
-                            countVal++;
-                        }
-                        if (r.taxaIlum !== null && !isNaN(r.taxaIlum)) {
-                            totalTaxaIlum += r.taxaIlum;
-                            if (r.taxaIlum > 0) countTaxaIlum++;
-                        }
-                        if (r.consumo !== null && !isNaN(r.consumo)) {
-                            totalCons += r.consumo;
-                        }
-                        if (r.dias !== null && !isNaN(r.dias)) {
-                            totalDays += Number(r.dias);
-                        }
-                        if (r.consumo !== null && r.consumo <= 100) {
-                            isentosCount++;
-                        }
-                    }
-                    prevR = r.leitura;
-                    if (r.dataLeitura) prevD = r.dataLeitura;
-                } else {
-                    r.consumo = null;
-                    r.media = null;
-                }
-            });
-
-            return { totalVal, totalTaxaIlum, countTaxaIlum, totalCons, totalDays, countVal, isentosCount, totalValidRows };
         }
 
         function updateCellField(idx, field, val) {
@@ -1020,6 +954,9 @@
             } else if (field === 'dias') {
                 records[idx][field] = val === "" ? null : Number(val);
                 records[idx]['_diasEditadoManual'] = (val !== "");
+            } else if (field === 'dataLeitura') {
+                records[idx]['dataLeitura'] = val;
+                // Ao mudar a data da leitura, permite recalcular os dias caso não tenha sido travado manualmente
             } else if (field === 'obs') {
                 records[idx]['obs'] = val;
             } else {
@@ -1041,6 +978,7 @@
                 document.getElementById("fieldCor").value = r.cor || "branco";
                 document.getElementById("fieldDataLeitura").value = r.dataLeitura || "";
                 document.getElementById("fieldLeitura").value = r.leitura !== null ? r.leitura : "";
+                document.getElementById("fieldDias").value = r.dias !== null && r.dias !== undefined ? r.dias : "";
                 document.getElementById("fieldValor").value = r.valor !== null ? r.valor : "";
                 document.getElementById("fieldTaxaIlum").value = r.taxaIlum !== null ? r.taxaIlum : "";
                 document.getElementById("fieldVencimento").value = r.vencimento || "";
@@ -1062,12 +1000,15 @@
         function saveEntry(e) {
             e.preventDefault();
             const idx = document.getElementById("editIndex").value;
+            const diasVal = document.getElementById("fieldDias").value;
             const rowData = {
                 id: idx !== "" ? records[idx].id : `item_${Date.now()}`,
                 mes: document.getElementById("fieldMes").value,
                 cor: document.getElementById("fieldCor").value,
                 dataLeitura: document.getElementById("fieldDataLeitura").value,
                 leitura: Number(document.getElementById("fieldLeitura").value) || null,
+                dias: diasVal !== "" ? Number(diasVal) : null,
+                _diasEditadoManual: diasVal !== "",
                 valor: document.getElementById("fieldValor").value ? Number(document.getElementById("fieldValor").value) : null,
                 taxaIlum: document.getElementById("fieldTaxaIlum").value ? Number(document.getElementById("fieldTaxaIlum").value) : null,
                 vencimento: document.getElementById("fieldVencimento").value,
